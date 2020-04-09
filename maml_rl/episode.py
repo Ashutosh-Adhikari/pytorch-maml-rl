@@ -121,8 +121,11 @@ class BatchEpisodes(object):
     def returns(self):
         if self._returns is None:
             self._returns = torch.zeros_like(self.rewards)
-            return_ = torch.zeros((self.batch_size,), dtype=torch.float32)
+            return_ = torch.zeros((self.batch_size,), dtype=torch.float32, device=self.device)
             for i in range(len(self) - 1, -1, -1):
+                print("Return cuda " + str(return_.is_cuda))
+                print("rewards[i] cuda" + str(self.rewards[i].is_cuda))
+                print("self mask [i] cuda" + str(self.mask[i].is_cuda))
                 return_ = self.gamma * return_ + self.rewards[i] * self.mask[i]
                 self._returns[i] = return_
         return self._returns
@@ -175,7 +178,7 @@ class BatchEpisodes(object):
     def compute_advantages(self, baseline, gae_lambda=1.0, normalize=True):
         #print("maks-shape" + str(self.mask.shape))
         # Compute the values based on the baseline
-        values = baseline(self).detach().t() # not sure if this should be reshaped/ t()
+        values = baseline(self).detach().t().cuda() # not sure if this should be reshaped/ t() # cuda ID 2.0
         # Add an additional 0 at the end of values for
         # the estimation at the end of the episode
         #print("values shape" + str(values.shape))
@@ -185,7 +188,7 @@ class BatchEpisodes(object):
         # Compute the advantages based on the values
         deltas = self.rewards + self.gamma * values[1:] - values[:-1]
         self._advantages = torch.zeros_like(self.rewards)
-        gae = torch.zeros((self.batch_size,), dtype=torch.float32)
+        gae = torch.zeros((self.batch_size,), dtype=torch.float32).cuda() # cuda ID 2.0
         for i in range(len(self) - 1, -1, -1):
             gae = gae * self.gamma * gae_lambda + deltas[i]
             self._advantages[i] = gae

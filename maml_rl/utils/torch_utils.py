@@ -15,11 +15,10 @@ def weighted_mean(tensor, lengths=None):
         tensor[length:, i].fill_(0.)
 
     extra_dims = (1,) * (tensor.dim() - 2)
-    lengths = torch.as_tensor(lengths, dtype=torch.float32)
+    lengths = torch.as_tensor(lengths, dtype=torch.float32).cuda() # CUDA ID 2.0
 
     out = torch.sum(tensor, dim=0)
     out.div_(lengths.view(-1, *extra_dims))
-
     return out
 
 def weighted_normalize(tensor, lengths=None, epsilon=1e-8):

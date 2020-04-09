@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from copy import deepcopy
+import threading
+import torch.multiprocessing as mp
 
 from maml_rl.utils.torch_utils import weighted_mean, to_numpy
 
@@ -73,7 +75,9 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
     #print("In RF")
     #print(episodes.batch_size)
     #print(len(episodes))
+    print("before loop cuda policy" + str(next(agent.policy_net.parameters()).is_cuda) + " "+ str(mp.current_process().name))
     for i in range(episodes.batch_size):
+        print("POLICY cuda = " + str(next(agent.policy_net.parameters()).is_cuda) + str(i) +" "+ str(mp.current_process().name) + " " + str(threading.current_thread().name))
         h_og, obs_mask, h_go, node_mask = agent.encode(obs_str[i], triplets[i], use_model='policy')
         #print('hgo_shape =  ' + str(h_go.shape))
         action_features, value, action_masks, new_h, new_c = agent.action_scoring(acl[i], h_og, obs_mask, h_go, node_mask, use_model='policy')
@@ -108,9 +112,10 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
 
     #log_probs = pi.log_prob(episodes.actions.view((-1, *episodes.action_shape)))
     #log_probs = log_probs.view(len(episodes), episodes.batch_size)
+    torch_log_probs = torch_log_probs.cuda() # CUDA ID 2.0
 
     losses = -weighted_mean(torch_log_probs * episodes.advantages,
-                            lengths=episodes.lengths)
+                            lengths=episodes.lengths) # CUDA ID 2.0
     if params is not None:  # RELOAD
         agent.policy_net.load_state_dict(old_model_dict)
     #print("about to exit reinforce loss : " + str(losses))

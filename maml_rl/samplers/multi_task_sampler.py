@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 #mp.set_start_method('forkserver', force=True)
-mp.set_start_method('spawn')
+#mp.set_start_method('spawn')
 mp.set_sharing_strategy('file_system')
 import asyncio
 import threading
@@ -104,6 +104,7 @@ class MultiTaskSampler(Sampler):
         agent_lock = mp.Lock() # policy_lock = mp.Lock()
         import pdb
         #pdb.set_trace()
+        print("entered sampler")
 
         self.workers = [SamplerWorker(index,
                                       env_name,

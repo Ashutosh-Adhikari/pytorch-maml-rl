@@ -174,9 +174,12 @@ class MAMLTRPO(GradientBasedMetaLearner):
             torch_kls = torch.cat(kls, 0).reshape(len(valid_episodes), valid_episodes.batch_size)
 
             torch_ratios = torch.cat(ratios, 0).reshape(len(valid_episodes), valid_episodes.batch_size)
-            losses = -weighted_mean(torch_ratios * valid_episodes.advantages, lengths=valid_episodes.lengths)
 
-            kls = weighted_mean(torch_kls, lengths=valid_episodes.lengths)
+            torch_ratios = torch_ratios.cuda() # CUDA ID 2.0
+            losses = -weighted_mean(torch_ratios * valid_episodes.advantages, lengths=valid_episodes.lengths).cpu() # CUDA ID 2.0
+
+            torch_kls = torch_kls.cuda() # CUDA ID 2.0
+            kls = weighted_mean(torch_kls, lengths=valid_episodes.lengths).cpu() # CUDA ID 2.0
             old_pis = old_pis_
             if params is not None:
                 self.agent.policy_net.load_state_dict(old_model_dict) # Reload

@@ -112,10 +112,10 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
 
     #log_probs = pi.log_prob(episodes.actions.view((-1, *episodes.action_shape)))
     #log_probs = log_probs.view(len(episodes), episodes.batch_size)
-    torch_log_probs = torch_log_probs.cuda() # CUDA ID 2.0
+    print("Should throw error")
 
-    losses = -weighted_mean(torch_log_probs * episodes.advantages,
-                            lengths=episodes.lengths) # CUDA ID 2.0
+    losses = -weighted_mean(torch_log_probs.cpu() * episodes.advantages,
+                            lengths=episodes.lengths).cuda() # CUDA ID 1.0
     if params is not None:  # RELOAD
         agent.policy_net.load_state_dict(old_model_dict)
     #print("about to exit reinforce loss : " + str(losses))

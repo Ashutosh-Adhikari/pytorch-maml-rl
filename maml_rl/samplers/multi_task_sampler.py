@@ -302,6 +302,7 @@ class SamplerWorker(mp.Process): # need to pass the agent
             self.train_queue.put((index, step, deepcopy(train_episodes)))
 
             with self.agent_lock: # self.policy_lock:
+                print("after lock")
                 loss = reinforce_loss(self.agent, train_episodes, params=params) # self.policy, train_episodes, params=params)
                 params = self.agent.policy_net.update_params(loss, #self.policy.update_params(loss,
                                                    params=params,

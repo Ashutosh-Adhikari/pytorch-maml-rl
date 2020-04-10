@@ -25,7 +25,7 @@ class LinearFeatureBaseline(nn.Module):
         self.weight.data.zero_()
         self._eye = torch.eye(self.feature_size,
                               dtype=torch.float32,
-                              device=self.weight.device)
+                              device=self.weight.device) # CUDA ID 1.0
 
     '''@property
     def feature_size(self):
@@ -116,14 +116,14 @@ class LinearFeatureBaseline(nn.Module):
         reg_coeff = self._reg_coeff
         #flattened_masked_ep_h_og = masked_ep_h_og.view(masked_ep_h_og.shape[0], -1)
         #XT_y = torch.matmul(featmat.t(), returns)
-        XT_y = torch.matmul(agg_ep_h_go.permute(1, 0), returns.cpu()) # for cuda ID2.0
+        XT_y = torch.matmul(agg_ep_h_go.permute(1, 0).cpu(), returns) # for cuda ID1.0
         #XT_X = torch.matmul(featmat.t(), featmat)
-        XT_X = torch.matmul(agg_ep_h_go.permute(1, 0), agg_ep_h_go)
+        XT_X = torch.matmul(agg_ep_h_go.permute(1, 0), agg_ep_h_go).cpu() # for cuda 1D1.0
         #print(XT_y.shape)
         #print(XT_X.shape)
         for _ in range(5):
             try:
-                coeffs, _ = torch.lstsq(XT_y, XT_X.cpu() + reg_coeff * self._eye) # for cuda
+                coeffs, _ = torch.lstsq(XT_y, XT_X + reg_coeff * self._eye) # for cuda ID 1.0
                 break
             except RuntimeError:
                 reg_coeff *= 10

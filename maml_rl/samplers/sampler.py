@@ -25,6 +25,9 @@ class Sampler(object):
         # self.env_kwargs = env_kwargs - we don't have kwargs for tw-env
         self.batch_size = batch_size
         self.agent = agent # self.policy = policy
+        #self.agent.policy_net.use_cuda = True
+        #self.agent.policy_net.cuda()
+        #self.agent.pretrained_cmd_gen_net.cuda()
         self.seed = seed
 
         if env is None:

@@ -103,21 +103,31 @@ class MAMLTRPO(GradientBasedMetaLearner):
         return _product
 
     async def surrogate_loss(self, train_futures, valid_futures, old_pi=None):
+        print("here in surr loss")
         first_order = (old_pi is not None) or self.first_order
         params = await self.adapt(train_futures,
                                   first_order=first_order)
+        print("after await in surr")
 
         with torch.set_grad_enabled(old_pi is None):
-            valid_episodes = await valid_futures
-            if params is not None: # can make a function
+            '''if params is not None: # can make a function
                 model_dict = self.agent.policy_net.state_dict()
+                print("after getting the state")
                 old_model_dict = deepcopy(model_dict)
+                print("after deepcopy")
                 inner_loop_params = {k: v for k, v in params.items() if k in model_dict}
                 model_dict.update(inner_loop_params)
+                print("after updat")
                 self.agent.policy_net.load_state_dict(model_dict)
 
+                print("after playing with model dict in step")'''
             ######
             ## can go in a function in ppo_agent.py
+
+            print("beofre await valid")
+            valid_episodes = await valid_futures
+            print("after await valid")
+
             valid_obs_str = valid_episodes.observations
             valid_triplets = valid_episodes.triplets
             valid_acl = valid_episodes.candidates
@@ -181,8 +191,8 @@ class MAMLTRPO(GradientBasedMetaLearner):
             torch_kls = torch_kls.cuda() # CUDA ID 2.0
             kls = weighted_mean(torch_kls, lengths=valid_episodes.lengths).cpu() # CUDA ID 2.0
             old_pis = old_pis_
-            if params is not None:
-                self.agent.policy_net.load_state_dict(old_model_dict) # Reload
+            #if params is not None:
+             #   self.agent.policy_net.load_state_dict(old_model_dict) # Reload
 
             '''#return losses.mean(), kls.mean(), old_pi
                 
@@ -221,6 +231,7 @@ class MAMLTRPO(GradientBasedMetaLearner):
         old_losses, old_kls, old_pis = self._async_gather([
             self.surrogate_loss(train, valid, old_pi=None)
             for (train, valid) in zip(zip(*train_futures), valid_futures)])
+        print("right after surrogate loss")
 
         logs['loss_before'] = to_numpy(old_losses)
         logs['kl_before'] = to_numpy(old_kls)

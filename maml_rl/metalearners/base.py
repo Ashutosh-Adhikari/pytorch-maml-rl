@@ -6,7 +6,7 @@ from maml_rl.samplers import MultiTaskSampler
 
 class GradientBasedMetaLearner(object):
     def __init__(self, agent, device='cpu'): # policy, device='cpu'):
-        self.device = torch.device(device)
+        #self.device = torch.device(device)
         self.agent = agent #self.policy = policy
         #self.agent.policy_net.to(self.device) #self.policy.to(self.device) # CUDA ID 2.0
         self._event_loop = asyncio.get_event_loop()

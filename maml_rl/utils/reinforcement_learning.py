@@ -66,12 +66,12 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
     print(episodes.batch_size)'''
     log_probs = []
 
-    if params is not None:
-        old_model_dict = agent.policy_net.state_dict()
-        model_dict = deepcopy(old_model_dict)
-        inner_loop_params = {k: v for k,v in params.items() if k in model_dict}
-        model_dict.update(inner_loop_params)
-        agent.policy_net.load_state_dict(model_dict)
+    #if params is not None:
+     #   old_model_dict = agent.policy_net.state_dict()
+      #  model_dict = deepcopy(old_model_dict)
+       # inner_loop_params = {k: v for k,v in params.items() if k in model_dict}
+        #model_dict.update(inner_loop_params)
+        #agent.policy_net.load_state_dict(model_dict)
     #print("In RF")
     #print(episodes.batch_size)
     #print(len(episodes))
@@ -112,11 +112,11 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
 
     #log_probs = pi.log_prob(episodes.actions.view((-1, *episodes.action_shape)))
     #log_probs = log_probs.view(len(episodes), episodes.batch_size)
-    print("Should throw error")
 
     losses = -weighted_mean(torch_log_probs.cpu() * episodes.advantages,
-                            lengths=episodes.lengths).cuda() # CUDA ID 1.0
-    if params is not None:  # RELOAD
-        agent.policy_net.load_state_dict(old_model_dict)
-    #print("about to exit reinforce loss : " + str(losses))
-    return losses.mean()
+                            lengths=episodes.lengths).mean() # CUDA ID 1.0
+    #if params is not None:  # RELOAD
+     #   agent.policy_net.load_state_dict(old_model_dict)
+    #print(losses.mean())
+    print("about to exit reinforce loss : " + str(losses))
+    return losses

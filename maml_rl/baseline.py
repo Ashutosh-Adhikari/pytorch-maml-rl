@@ -61,6 +61,7 @@ class LinearFeatureBaseline(nn.Module):
         ep_obs_mask = []
         ep_h_go = []
         ep_node_mask = []
+        import torch.multiprocessing as mp
         for i in range(episodes.batch_size):
             h_og, obs_mask, h_go, node_mask = self.agent.encode(ep_obs_str[i], ep_triplets[i], use_model="policy")
             #ep_h_og.append(h_og.unsqueeze(0))
@@ -116,8 +117,10 @@ class LinearFeatureBaseline(nn.Module):
         reg_coeff = self._reg_coeff
         #flattened_masked_ep_h_og = masked_ep_h_og.view(masked_ep_h_og.shape[0], -1)
         #XT_y = torch.matmul(featmat.t(), returns)
-        XT_y = torch.matmul(agg_ep_h_go.permute(1, 0).cpu(), returns) # for cuda ID1.0
+        import torch.multiprocessing as mp
+        XT_y = torch.matmul(agg_ep_h_go.permute(1, 0), returns.cuda()).cpu() # for cuda ID1.0
         #XT_X = torch.matmul(featmat.t(), featmat)
+
         XT_X = torch.matmul(agg_ep_h_go.permute(1, 0), agg_ep_h_go).cpu() # for cuda 1D1.0
         #print(XT_y.shape)
         #print(XT_X.shape)

@@ -123,9 +123,6 @@ class BatchEpisodes(object):
             self._returns = torch.zeros_like(self.rewards)
             return_ = torch.zeros((self.batch_size,), dtype=torch.float32, device=self.device)
             for i in range(len(self) - 1, -1, -1):
-                print("Return cuda " + str(return_.is_cuda))
-                print("rewards[i] cuda" + str(self.rewards[i].is_cuda))
-                print("self mask [i] cuda" + str(self.mask[i].is_cuda))
                 return_ = self.gamma * return_ + self.rewards[i] * self.mask[i]
                 self._returns[i] = return_
         return self._returns
@@ -178,13 +175,12 @@ class BatchEpisodes(object):
     def compute_advantages(self, baseline, gae_lambda=1.0, normalize=True):
         #print("maks-shape" + str(self.mask.shape))
         # Compute the values based on the baseline
-        values = baseline(self).detach().t() # not sure if this should be reshaped/ t() # cuda ID 1.0
+        values = baseline(self).detach().t()  # not sure if this should be reshaped/ t() # cuda ID 1.0
         # Add an additional 0 at the end of values for
         # the estimation at the end of the episode
         #print("values shape" + str(values.shape))
         #print("rewards shape "  + str(self.rewards.shape))
         values = F.pad(values * self.mask, (0, 0, 0, 1))
-        print("values cuda : "+ str(values.is_cuda))
 
         # Compute the advantages based on the values
         deltas = self.rewards + self.gamma * values[1:] - values[:-1]

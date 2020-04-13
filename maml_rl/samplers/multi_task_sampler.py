@@ -1,9 +1,11 @@
 import numpy as np
 import torch
 import torch.multiprocessing as mp
+import multiprocessing as mp1
+#mp = _mp.get_context("spawn")
 #mp.set_start_method('forkserver', force=True)
 #mp.set_start_method('spawn')
-mp.set_sharing_strategy('file_system')
+#mp.set_sharing_strategy('file_system')
 import asyncio
 import threading
 import time
@@ -15,7 +17,10 @@ from maml_rl.samplers.sampler import Sampler, make_env
 from maml_rl.envs.utils.sync_vector_env import SyncVectorEnv
 from maml_rl.episode import BatchEpisodes
 from maml_rl.utils.reinforcement_learning import reinforce_loss
-from generic import to_pt
+import torch._C
+_is_in_bad_fork = getattr(torch._C, "_cuda_isInBadFork", lambda: False)
+
+#from generic import to_pt
 torch.set_num_threads(1)
 
 def _create_consumer(queue, futures, loop=None):
@@ -97,6 +102,8 @@ class MultiTaskSampler(Sampler):
                                                env=env)
 
         self.num_workers = num_workers
+        #ctx = mp.get_context("spawn")
+        
 
         self.task_queue = mp.JoinableQueue()
         self.train_episodes_queue = mp.Queue()
@@ -121,16 +128,32 @@ class MultiTaskSampler(Sampler):
                                       agent_lock) #policy_lock)
             for index in range(num_workers)]
         import pdb
+       
+        print("CUDA initialized *after* init Samplers " + str(torch.cuda.is_initialized()))
         #pdb.set_trace()
         #pdb.set_trace()
         for worker in self.workers:
             worker.daemon = True
             worker.start()
+            '''worker.agent.use_cuda = True
+            worker.agent.policy_net.cuda()
+            worker.agent.pretrained_cmd_gen_net.cuda()
+
+            worker.baseline.agent.use_cuda = True
+            worker.baseline.agent.policy_net.cuda()
+            worker.baseline.agent.pretrained_cmd_gen_net.cuda()'''
+            
+            #worker.join()
 
         self._waiting_sample = False
         self._event_loop = asyncio.get_event_loop()
         self._train_consumer_thread = None
         self._valid_consumer_thread = None
+
+        '''self.agent.policy_net.use_cuda = True
+        self.agent.policy_net.cuda()
+        self.agent.pretrained_cmd_gen_net.cuda()
+        self.agent.policy_net.share_memory()'''
         print("finishing init")
 
     def sample_tasks(self, num_tasks):
@@ -158,7 +181,7 @@ class MultiTaskSampler(Sampler):
         #pdb.set_trace()
         self._waiting_sample = True
         print(torch.multiprocessing.current_process())
-        print("Hello from Sample async")
+        print("Hello from Sample async" + str(torch.cuda.is_initialized()))
         return futures
 
     def sample_wait(self, episodes_futures):
@@ -267,7 +290,16 @@ class SamplerWorker(mp.Process): # need to pass the agent
         self.envs.seed(None if (seed is None) else seed + index * batch_size)
         self.batch_size = batch_size
         self.agent = agent # self.policy = policy
+        #self.agent.use_cuda = True
+        #self.agent.policy_net.cuda()
+        #self.agent.pretrained_cmd_gen_net.cuda()
+        #self.agent.policy_net.share_memory()
         self.baseline = baseline
+
+        #self.baseline.agent.use_cuda = True
+        #self.baseline.agent.policy_net.cuda()
+        #self.baseline.agent.pretrained_cmd_gen_net.cuda()
+
 
         self.task_queue = task_queue
         self.train_queue = train_queue
@@ -288,6 +320,21 @@ class SamplerWorker(mp.Process): # need to pass the agent
         # applied since this is only used for sampling trajectories, and not
         # for optimization.
         print("Hi " + str(torch.multiprocessing.current_process()))
+        print("CUDA initialize before .cuda() in sample " + str(torch.cuda.is_initialized()) + " bad state : " + str(_is_in_bad_fork()))
+
+        self.agent.policy_net.use_cuda = True
+        self.agent.use_cuda = True
+        self.agent.policy_net.cuda()
+        self.agent.pretrained_cmd_gen_net.cuda()
+        self.agent.policy_net.share_memory()
+
+
+        self.baseline.agent.use_cuda = True
+        self.baseline.agent.policy_net.cuda()
+        self.baseline.agent.policy_net.use_cuda = True
+        self.baseline.agent.pretrained_cmd_gen_net.cuda()
+        self.baseline.agent.policy_net.share_memory()
+
         params = None
         for step in range(num_steps):
             train_episodes = self.create_episodes(params=params,
@@ -304,16 +351,18 @@ class SamplerWorker(mp.Process): # need to pass the agent
             with self.agent_lock: # self.policy_lock:
                 print("after lock")
                 loss = reinforce_loss(self.agent, train_episodes, params=params) # self.policy, train_episodes, params=params)
-                params = self.agent.policy_net.update_params(loss, #self.policy.update_params(loss,
-                                                   params=params,
-                                                   step_size=fast_lr,
-                                                   first_order=True)
+                print("after RL")
+                #params = self.agent.policy_net.update_params(loss, #self.policy.update_params(loss,
+                  #                                 params=params,
+                   #                                step_size=fast_lr,
+                    #                               first_order=True)
 
         # Sample the validation trajectories with the adapted policy
+        print("Out of lock scope")
         valid_episodes = self.create_episodes(params=params,
                                               gamma=gamma,
                                               gae_lambda=gae_lambda,
-                                              device=device)
+                                              device=device, valid=True)
         valid_episodes.log('_enqueueAt', datetime.now(timezone.utc))
         self.valid_queue.put((index, None, deepcopy(valid_episodes)))
 
@@ -321,7 +370,9 @@ class SamplerWorker(mp.Process): # need to pass the agent
                         params=None,
                         gamma=0.95,
                         gae_lambda=1.0,
-                        device='cpu'):
+                        device='cpu', valid=False):
+        if valid:
+            print("HEYHEYHEYHEYHEYHEYHEYHEYEHYEHEYHEYHEYEHEYHEY")
         episodes = BatchEpisodes(batch_size=self.batch_size,
                                  gamma=gamma,
                                  device=device)
@@ -330,9 +381,9 @@ class SamplerWorker(mp.Process): # need to pass the agent
 
         t0 = time.time()
         #print("create episode")
-        if params is not None:
-            old_params = self.agent.policy_net.state_dict()
-            self.agent.policy_net.load_state_dict(params, strict=False)
+        #if params is not None:
+         #   old_params = self.agent.policy_net.state_dict()
+          #  self.agent.policy_net.load_state_dict(params, strict=False)
         for item in self.sample_trajectories(params=params):
             episodes.append(*item)
             #print("obs len")
@@ -352,8 +403,8 @@ class SamplerWorker(mp.Process): # need to pass the agent
         episodes.compute_advantages(self.baseline,
                                     gae_lambda=gae_lambda,
                                     normalize=True)
-        if params is not None:
-            self.agent.policy_net.load_state_dict(old_params) # hope there is no race condition here! NOTE: strict=True
+        #if params is not None:
+         #   self.agent.policy_net.load_state_dict(old_params) # hope there is no race condition here! NOTE: strict=True
         #print("I just computed the ads")
         return episodes
 
@@ -389,6 +440,7 @@ class SamplerWorker(mp.Process): # need to pass the agent
                 #print("Hey after get game info")
                 observation_strings = [item + " <sep> " + a for item, a in zip(observation_strings, chosen_actions)]
                 #print("just before acting")
+                print("CUDA initialize before act() st " + str(torch.cuda.is_initialized()) + " agent polict cuda : " + str(next(self.agent.policy_net.parameters()).is_cuda))
                 value, chosen_actions, action_log_probs, chosen_indices, _, prev_h, prev_c = self.agent.act(observation_strings, current_triplets, action_candidate_list) ## incorporate params
                 #print("after acting")
                 chosen_actions = [(action if not done else "restart") for done, action in zip(dones, chosen_actions)]
@@ -412,13 +464,26 @@ class SamplerWorker(mp.Process): # need to pass the agent
                 prev_actions = chosen_actions_before_parsing
 
     def run(self):
+        print("inside run " + str(torch.cuda.is_initialized()))
+        print("Run before cuda: process name " + str(mp.current_process().name) + " cuda :" + str(next(self.agent.policy_net.parameters()).is_cuda))
+        #self.agent.policy_net.use_cuda = True
+        #self.agent.policy_net.cuda()
+        #self.agent.pretrained_cmd_gen_net.cuda()
+
+        #self.baseline.agent.use_cuda = True
+        #self.baseline.agent.policy_net.cuda()
+        #self.baseline.agent.pretrained_cmd_gen_net.cuda()
+        print("Run after cuda: process name " + str(mp.current_process().name) + " cuda :" + str(next(self.agent.policy_net.parameters()).is_cuda))
         while True:
             data = self.task_queue.get()
+            print("data " + str(data))
             #print("Hey from run sw")
             import pdb
             if data is None:
+                print("about to break")
                 self.envs.close()
                 self.task_queue.task_done()
+                print("About to exit : "+str(mp.current_process().name))
                 break
 
             index, task, kwargs = data

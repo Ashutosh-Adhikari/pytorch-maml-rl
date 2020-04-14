@@ -4,6 +4,23 @@ import numpy as np
 from torch.distributions import Categorical, Independent, Normal
 from torch.nn.utils.convert_parameters import _check_param_device
 
+def to_pt(np_matrix, enable_cuda=False, type='long'):
+    if type == 'long':
+        if enable_cuda:
+            return torch.autograd.Variable(torch.from_numpy(np_matrix).type(torch.LongTensor).cuda())
+        else:
+            return torch.autograd.Variable(torch.from_numpy(np_matrix).type(torch.LongTensor))
+    elif type == 'float':
+        if enable_cuda:
+            return torch.autograd.Variable(torch.from_numpy(np_matrix).type(torch.FloatTensor).cuda())
+        else:
+            return torch.autograd.Variable(torch.from_numpy(np_matrix).type(torch.FloatTensor))
+    elif type == 'bool':
+        if enable_cuda:
+            return torch.autograd.Variable(torch.from_numpy(np_matrix).type(torch.BoolTensor).cuda())
+        else:
+            return torch.autograd.Variable(torch.from_numpy(np_matrix).type(torch.BoolTensor))
+
 def weighted_mean(tensor, lengths=None):
     if lengths is None:
         return torch.mean(tensor)

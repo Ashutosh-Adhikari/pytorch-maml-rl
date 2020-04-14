@@ -15,7 +15,7 @@ from maml_rl.samplers.sampler import Sampler, make_env
 from maml_rl.envs.utils.sync_vector_env import SyncVectorEnv
 from maml_rl.episode import BatchEpisodes
 from maml_rl.utils.reinforcement_learning import reinforce_loss
-from generic import to_pt
+from maml_rl.utils.torch_utils import to_pt
 torch.set_num_threads(1)
 
 def _create_consumer(queue, futures, loop=None):
@@ -119,9 +119,7 @@ class MultiTaskSampler(Sampler):
                                       self.valid_episodes_queue,
                                       agent_lock) #policy_lock)
             for index in range(num_workers)]
-        import pdb
-        #pdb.set_trace()
-        #pdb.set_trace()
+
         for worker in self.workers:
             worker.daemon = True
             worker.start()
@@ -157,7 +155,6 @@ class MultiTaskSampler(Sampler):
         #pdb.set_trace()
         self._waiting_sample = True
         print(torch.multiprocessing.current_process())
-        print("Hello from Sample async")
         return futures
 
     def sample_wait(self, episodes_futures):
@@ -286,7 +283,6 @@ class SamplerWorker(mp.Process): # need to pass the agent
         # `first_order=True` no matter if the second order version of MAML is
         # applied since this is only used for sampling trajectories, and not
         # for optimization.
-        print("Hi " + str(torch.multiprocessing.current_process()))
         params = None
         for step in range(num_steps):
             train_episodes = self.create_episodes(params=params,
@@ -333,32 +329,18 @@ class SamplerWorker(mp.Process): # need to pass the agent
             self.agent.policy_net.load_state_dict(params, strict=False)
         for item in self.sample_trajectories(params=params):
             episodes.append(*item)
-            #print("obs len")
-            #print(len(episodes._observations_list[-1]))
-        #print("Hey1Hey1Hey1")
-        #print(len(episodes._observations_list))
-        #print("Yo1")
-        #print([len(elem) for elem in episodes._observations_list])
-        #print(episodes._observations_list[-1])
         episodes.log('duration', time.time() - t0)
-        #print("HeyHeyHey")
-        #print(len(episodes._observations_list))
-        #print(len(episodes._observations_list[0]))
-        #print(episodes._observations_list[0])
         self.baseline.fit(episodes)
-        #print("I just fit!")
         episodes.compute_advantages(self.baseline,
                                     gae_lambda=gae_lambda,
                                     normalize=True)
         if params is not None:
             self.agent.policy_net.load_state_dict(old_params) # hope there is no race condition here! NOTE: strict=True
-        #print("I just computed the ads")
         return episodes
 
     def sample_trajectories(self, params=None): # need to pass Agent() to the class? # need to incorporate params for valid_trajs
         _ = self.envs.reset()
         _, _, dones, infos = self.envs.step(["tw-reset"] * self.batch_size)  # HACK: since reset doesn't return `infos`.
-        #print("In st")
         import pdb
         with torch.no_grad():
             ######
@@ -391,17 +373,6 @@ class SamplerWorker(mp.Process): # need to pass the agent
                 #print("after acting")
                 chosen_actions = [(action if not done else "restart") for done, action in zip(dones, chosen_actions)]
                 chosen_actions_before_parsing = [(item[idx] if not done else "*restart*") for item, idx, done in zip(dict_info_for_agent["admissible_commands"], chosen_indices, dones)]
-                #print(chosen_actions_before_parsing)
-                #print(chosen_indices)
-                #print("after choosing actions")
-                ######
-                # TODO:
-                # observations_tensor = torch.from_numpy(observations) ## Do we realy want numpy? If so, i will need to demarcate inside the agent.act and essentialy write the function explicitly write here--easy
-                # pi = self.policy(observations_tensor, params=params)
-                # actions_tensor = pi.sample()
-                # actions = actions_tensor.cpu().numpy()
-                # actions = ["look"] * self.batch_size
-                #actions = chosen_actions_before_parsing.cpu().numpy()
 
                 new_observations, rewards, dones, infos = self.envs.step(chosen_actions_before_parsing)
                 batch_ids = infos['batch_ids']
@@ -412,7 +383,6 @@ class SamplerWorker(mp.Process): # need to pass the agent
     def run(self):
         while True:
             data = self.task_queue.get()
-            #print("Hey from run sw")
             import pdb
             if data is None:
                 self.envs.close()
@@ -420,7 +390,6 @@ class SamplerWorker(mp.Process): # need to pass the agent
                 break
 
             index, task, kwargs = data
-            #print(data)
             self.envs.reset_task(task)
             self.sample(index, **kwargs)
             self.task_queue.task_done()

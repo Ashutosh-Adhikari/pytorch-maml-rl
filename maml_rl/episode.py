@@ -46,17 +46,6 @@ class BatchEpisodes(object):
 
     @property
     def observations(self):
-        '''if self._observations is None:
-            observation_shape = self._observations_list[0][0].shape
-            observations = np.zeros((len(self), self.batch_size) + observation_shape,
-                                    dtype=np.float32)
-            for i in range(self.batch_size):
-                length = self.lengths[i]
-                np.stack(self._observations_list[i],
-                         axis=0,
-                         out=observations[:length, i])
-            self._observations = torch.as_tensor(observations, device=self.device)
-            del self._observations_list'''
         if self._observations is None:
             self._observations = self._observations_list
             #print(len(self._observations))
@@ -92,19 +81,6 @@ class BatchEpisodes(object):
             self._candidates = self._candidates_list
             del self._candidates_list
         return self._candidates
-
-    '''@property
-    def actions(self):
-        if self._actions is None:
-            action_shape = self._actions_list[0][0].shape
-            actions = np.zeros((len(self), self.batch_size) + action_shape,
-                               dtype=np.float32)
-            for i in range(self.batch_size):
-                length = self.lengths[i]
-                np.stack(self._actions_list[i], axis=0, out=actions[:length, i])
-            self._actions = torch.as_tensor(actions, device=self.device)
-            del self._actions_list
-        return self._actions'''
 
     @property
     def rewards(self):
@@ -151,12 +127,6 @@ class BatchEpisodes(object):
                 observations, triplets, candidates, actions, chosen_indices, rewards, batch_ids):
             if batch_id is None:
                 continue
-            # self._observations_list[batch_id].append(observation.astype(np.float32))
-            # self._actions_list[batch_id].append(action.astype(np.float32))
-            # self._rewards_list[batch_id].append(reward.astype(np.float32))
-            #print("HEY-single obs in batch" + str(batch_id))
-            #print("OBS: " + str(observation))
-            #print("ACT: " + str(action))
             self._observations_list[batch_id].append(observation)
             self._triplets_list[batch_id].append(triplet)
             self._candidates_list[batch_id].append(candidate)
@@ -173,13 +143,10 @@ class BatchEpisodes(object):
         self._logs[key] = value
 
     def compute_advantages(self, baseline, gae_lambda=1.0, normalize=True):
-        #print("maks-shape" + str(self.mask.shape))
         # Compute the values based on the baseline
         values = baseline(self).detach().t() # not sure if this should be reshaped/ t()
         # Add an additional 0 at the end of values for
         # the estimation at the end of the episode
-        #print("values shape" + str(values.shape))
-        #print("rewards shape "  + str(self.rewards.shape))
         values = F.pad(values * self.mask, (0, 0, 0, 1))
 
         # Compute the advantages based on the values

@@ -1,10 +1,10 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from debug import ForkedPdb as fpdb
+
 from collections import OrderedDict
 
-from layers import masked_mean
+from maml_rl.utils.layers import masked_mean
 
 class LinearFeatureBaseline(nn.Module):
     """Linear baseline based on handcrafted features, as described in [1] 
@@ -27,15 +27,8 @@ class LinearFeatureBaseline(nn.Module):
                               dtype=torch.float32,
                               device=self.weight.device)
 
-    '''@property
-    def feature_size(self):
-        return 2 * self.input_size + 4'''
     @property
     def feature_size(self):
-        '''if self.agent.policy_net.enable_text_input==False:
-            return self.agent.policy_net.block_hidden_dim * 99
-        elif self.agent.policy_net.enable_graph_input==False:
-            return self.agent.policy_net.block_'''
         return self.agent.policy_net.block_hidden_dim
 
     def _feature(self, episodes):
@@ -68,16 +61,8 @@ class LinearFeatureBaseline(nn.Module):
             h_go = F.pad(h_go, (0, 0, 0, 0, 0, max_ep_length-ep_lengths[i])) # hardcoded not only for graph input--but for padding too--suggestions?
             node_mask = F.pad(node_mask, (0, 0, 0, max_ep_length-ep_lengths[i]))
             ep_h_go.append(h_go.unsqueeze(0))
-            #ep_obs_mask.append(obs_mask.unsqueeze(0))
             ep_node_mask.append(node_mask.unsqueeze(0))
-        #print("in twfeature")
-        #print(len(ep_h_go))
-        #print(len(ep_h_go[0]))
-        #print('ep_lengths : ' + str(ep_lengths))
         xx = [elem.shape for elem in ep_h_go]
-        #print(xx)
-        #print(h_go.shape)
-        #print(torch.cat(ep_h_go, 0).shape)
         if self.agent.policy_net.enable_text_input==False:
             return torch.cat(ep_h_go, 0), torch.cat(ep_node_mask, 0)
         elif self.agent.policy_net.enable_graph_input==False:
@@ -95,32 +80,10 @@ class LinearFeatureBaseline(nn.Module):
         agg_ep_h_go = masked_ep_h_go.view(masked_ep_h_go.shape[0] * masked_ep_h_go.shape[1], masked_ep_h_go.shape[-2], masked_ep_h_go.shape[-1])
         agg_ep_node_masks = ep_node_masks.view(ep_node_masks.shape[0] * ep_node_masks.shape[1], ep_node_masks.shape[-1])
         agg_ep_h_go = masked_mean(agg_ep_h_go, agg_ep_node_masks) # bs * seq_len X block_hidden_dim
-        #print(ep_h_og[0].shape)
-        #print(ep_h_og[1].shape)
-        #print("----------------")
-        #print(len(episodes.observations))
-        #print(len(episodes.observations[0]))
-        #print(len(episodes.observations[0][0]))
-        #print("PRINTING CANDS")
-        #print(len(episodes.candidates))
-        #print(episodes.candidates[0])
-        #print(episodes.candidates[0][0])
-        #print(len(episodes.candidates[0]))
-        #print(len(episodes.candidates[0][0]))
-        #print("returns") 
-        #print(episodes.returns)
-        #print(len(episodes.returns))
-        #print(len(episodes.returns[0]))
         returns = episodes.returns.view(-1, 1)
-        #print("RETRNS" + str(returns.shape))
         reg_coeff = self._reg_coeff
-        #flattened_masked_ep_h_og = masked_ep_h_og.view(masked_ep_h_og.shape[0], -1)
-        #XT_y = torch.matmul(featmat.t(), returns)
         XT_y = torch.matmul(agg_ep_h_go.permute(1, 0), returns)
-        #XT_X = torch.matmul(featmat.t(), featmat)
         XT_X = torch.matmul(agg_ep_h_go.permute(1, 0), agg_ep_h_go)
-        #print(XT_y.shape)
-        #print(XT_X.shape)
         for _ in range(5):
             try:
                 coeffs, _ = torch.lstsq(XT_y, XT_X + reg_coeff * self._eye)
@@ -141,8 +104,5 @@ class LinearFeatureBaseline(nn.Module):
         agg_node_masks = masks.view(masks.shape[0] * masks.shape[1], masks.shape[-1])
         agg_masked_features = masked_mean(agg_masked_features, agg_node_masks) # bs * seq_len X block_hidden_dim
         values = torch.mv(agg_masked_features, self.weight)
-        
-        #print("baseline for")
-        #print(values.shape)
-        #print(self.weight.shape)
+
         return values.view(features.shape[:2])

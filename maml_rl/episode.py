@@ -172,10 +172,10 @@ class BatchEpisodes(object):
     def log(self, key, value):
         self._logs[key] = value
 
-    def compute_advantages(self, baseline, gae_lambda=1.0, normalize=True):
+    def compute_advantages(self, baseline, agent, gae_lambda=1.0, normalize=True):
         #print("maks-shape" + str(self.mask.shape))
         # Compute the values based on the baseline
-        values = baseline(self).detach().t()  # not sure if this should be reshaped/ t() # cuda ID 1.0
+        values = baseline(self, agent).detach().t()  # not sure if this should be reshaped/ t() # cuda ID 1.0
         # Add an additional 0 at the end of values for
         # the estimation at the end of the episode
         #print("values shape" + str(values.shape))

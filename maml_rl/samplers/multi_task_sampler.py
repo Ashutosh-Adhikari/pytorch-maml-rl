@@ -329,11 +329,11 @@ class SamplerWorker(mp.Process): # need to pass the agent
         self.agent.policy_net.share_memory()
 
 
-        self.baseline.agent.use_cuda = True
-        self.baseline.agent.policy_net.cuda()
-        self.baseline.agent.policy_net.use_cuda = True
-        self.baseline.agent.pretrained_cmd_gen_net.cuda()
-        self.baseline.agent.policy_net.share_memory()
+        #self.baseline.agent.use_cuda = True
+        #self.baseline.agent.policy_net.cuda()
+        #self.baseline.agent.policy_net.use_cuda = True
+        #self.baseline.agent.pretrained_cmd_gen_net.cuda()
+        #self.baseline.agent.policy_net.share_memory()
 
         params = None
         for step in range(num_steps):
@@ -398,9 +398,9 @@ class SamplerWorker(mp.Process): # need to pass the agent
         #print(len(episodes._observations_list))
         #print(len(episodes._observations_list[0]))
         #print(episodes._observations_list[0])
-        self.baseline.fit(episodes)
+        self.baseline.fit(episodes, self.agent)
         #print("I just fit!")
-        episodes.compute_advantages(self.baseline,
+        episodes.compute_advantages(self.baseline, self.agent, 
                                     gae_lambda=gae_lambda,
                                     normalize=True)
         #if params is not None:

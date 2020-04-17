@@ -14,7 +14,7 @@ class LinearFeatureBaseline(nn.Module):
         "Benchmarking Deep Reinforcement Learning for Continuous Control", 2016 
         (https://arxiv.org/abs/1604.06778)
     """
-    def __init__(self, input_size, agent, reg_coeff=1e-5, block_hidden_dim=64):
+    def __init__(self, input_size, reg_coeff=1e-5, block_hidden_dim=64):
         super(LinearFeatureBaseline, self).__init__()
         self.input_size = input_size
         self._reg_coeff = reg_coeff

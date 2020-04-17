@@ -142,9 +142,9 @@ class BatchEpisodes(object):
     def log(self, key, value):
         self._logs[key] = value
 
-    def compute_advantages(self, baseline, gae_lambda=1.0, normalize=True):
+    def compute_advantages(self, baseline, agent, gae_lambda=1.0, normalize=True):
         # Compute the values based on the baseline
-        values = baseline(self).detach().t() # not sure if this should be reshaped/ t()
+        values = baseline(self, agent).detach().t() # not sure if this should be reshaped/ t()
         # Add an additional 0 at the end of values for
         # the estimation at the end of the episode
         values = F.pad(values * self.mask, (0, 0, 0, 1))

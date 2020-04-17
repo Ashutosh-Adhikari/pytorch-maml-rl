@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.multiprocessing as mp
 #mp.set_start_method('forkserver', force=True)
-mp.set_start_method('spawn')
+#mp.set_start_method('spawn')
 mp.set_sharing_strategy('file_system')
 import asyncio
 import threading
@@ -330,8 +330,8 @@ class SamplerWorker(mp.Process): # need to pass the agent
         for item in self.sample_trajectories(params=params):
             episodes.append(*item)
         episodes.log('duration', time.time() - t0)
-        self.baseline.fit(episodes)
-        episodes.compute_advantages(self.baseline,
+        self.baseline.fit(episodes, self.agent)
+        episodes.compute_advantages(self.baseline, self.agent,
                                     gae_lambda=gae_lambda,
                                     normalize=True)
         if params is not None:

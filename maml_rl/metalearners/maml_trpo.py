@@ -59,6 +59,10 @@ class MAMLTRPO(GradientBasedMetaLearner):
         self.first_order = first_order
 
     async def adapt(self, train_futures, first_order=None):
+        self.agent.use_cuda = True
+        self.agent.policy_net.use_cuda = True
+        self.agent.policy_net.cuda()
+
         if first_order is None:
             first_order = self.first_order
         # Loop over the number of steps of adaptation
@@ -152,8 +156,8 @@ class MAMLTRPO(GradientBasedMetaLearner):
                 #new_log_prob = pi.log_prob(torch.cat(valid_chosen_indices[i])).reshape(len(valid_episodes), -1)
                 #old_log_prob = old_pi_.log_prob(torch.cat(valid_chosen_indices[i])).reshape(len(valid_episodes), -1)
 
-                unpadded_new_log_prob = pi.log_prob(torch.cat(valid_chosen_indices[i]))
-                unpadded_old_log_prob = old_pi_.log_prob(torch.cat(valid_chosen_indices[i]))
+                unpadded_new_log_prob = pi.log_prob(torch.cat(valid_chosen_indices[i]).cuda())
+                unpadded_old_log_prob = old_pi_.log_prob(torch.cat(valid_chosen_indices[i]).cuda())
 
                 padded_new_log_prob = F.pad(unpadded_new_log_prob, (0, valid_max_eps_length-valid_episode_lengths[i])).reshape(len(valid_episodes), -1)
                 padded_old_log_prob = F.pad(unpadded_old_log_prob, (0, valid_max_eps_length-valid_episode_lengths[i])).reshape(len(valid_episodes), -1)
@@ -174,9 +178,9 @@ class MAMLTRPO(GradientBasedMetaLearner):
             torch_kls = torch.cat(kls, 0).reshape(len(valid_episodes), valid_episodes.batch_size)
 
             torch_ratios = torch.cat(ratios, 0).reshape(len(valid_episodes), valid_episodes.batch_size)
-            losses = -weighted_mean(torch_ratios * valid_episodes.advantages, lengths=valid_episodes.lengths)
+            losses = -weighted_mean(torch_ratios.cpu() * valid_episodes.advantages, lengths=valid_episodes.lengths).cuda()
 
-            kls = weighted_mean(torch_kls, lengths=valid_episodes.lengths)
+            kls = weighted_mean(torch_kls.cpu(), lengths=valid_episodes.lengths).cuda()
             old_pis = old_pis_
             if params is not None:
                 self.agent.policy_net.load_state_dict(old_model_dict) # Reload

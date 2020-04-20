@@ -133,7 +133,6 @@ class BatchEpisodes(object):
             self._actions_list[batch_id].append(action)
             self._chosen_indices_list[batch_id].append(chosen_index)
             self._rewards_list[batch_id].append(reward.astype(np.float32))
-            #print("in appeend")
 
     @property
     def logs(self):
@@ -145,9 +144,11 @@ class BatchEpisodes(object):
     def compute_advantages(self, baseline, agent, gae_lambda=1.0, normalize=True):
         # Compute the values based on the baseline
         values = baseline(self, agent).detach().t() # not sure if this should be reshaped/ t()
+        print(str(values.shape) + " values shape")
         # Add an additional 0 at the end of values for
         # the estimation at the end of the episode
         values = F.pad(values * self.mask, (0, 0, 0, 1))
+        print(str(values.shape) + " values after pad")
 
         # Compute the advantages based on the values
         deltas = self.rewards + self.gamma * values[1:] - values[:-1]

@@ -1,5 +1,9 @@
+import numpy as np
 import torch
 import torch.multiprocessing as mp
+#mp.set_start_method('forkserver', force=True)
+#mp.set_start_method('spawn')
+mp.set_sharing_strategy('file_system')
 import asyncio
 import threading
 import time
@@ -11,15 +15,21 @@ from maml_rl.samplers.sampler import Sampler, make_env
 from maml_rl.envs.utils.sync_vector_env import SyncVectorEnv
 from maml_rl.episode import BatchEpisodes
 from maml_rl.utils.reinforcement_learning import reinforce_loss
-
+from maml_rl.utils.torch_utils import to_pt
+torch.set_num_threads(1)
 
 def _create_consumer(queue, futures, loop=None):
     if loop is None:
         loop = asyncio.get_event_loop()
     while True:
         data = queue.get()
+        #print('Thread name : '+str(threading.currentThread().getName()))
         if data is None:
+            #print('breaking from : '+ str(threading.currentThread().getName()))
             break
+        import pdb
+        #pdb.set_trace()
+        #print("In Create Consumer ")
         index, step, episodes = data
         future = futures if (step is None) else futures[step]
         if not future[index].cancelled():
@@ -35,16 +45,22 @@ class MultiTaskSampler(Sampler):
         Name of the environment. This environment should be an environment
         registered through `gym`. See `maml.envs`.
 
-    env_kwargs : dict
-        Additional keywork arguments to be added when creating the environment.
+    ~env_kwargs : dict
+        Additional keywork arguments to be added when creating the environment.~
+     We don't have kwargs or tw-env
 
     batch_size : int
         Number of trajectories to sample from each task (ie. `fast_batch_size`).
 
-    policy : `maml_rl.policies.Policy` instance
+    ~policy : `maml_rl.policies.Policy` instance
         The policy network for sampling. Note that the policy network is an
         instance of `torch.nn.Module` that takes observations as input and
-        returns a distribution (typically `Normal` or `Categorical`).
+        returns a distribution (typically `Normal` or `Categorical`).~
+
+    agent : `TWr.agent.Agent`
+        The GATA agent with TWr/model.KG_Manipulation for sampling. Can we used for 
+        preprocessing as well as getting distributions of actions given
+        the observations.
 
     baseline : `maml_rl.baseline.LinearFeatureBaseline` instance
         The baseline. This baseline is an instance of `nn.Module`, with an
@@ -66,17 +82,17 @@ class MultiTaskSampler(Sampler):
     """
     def __init__(self,
                  env_name,
-                 env_kwargs,
+                 #env_kwargs,
                  batch_size,
-                 policy,
+                 agent, #policy,
                  baseline,
                  env=None,
                  seed=None,
                  num_workers=1):
         super(MultiTaskSampler, self).__init__(env_name,
-                                               env_kwargs,
+                                               #env_kwargs,
                                                batch_size,
-                                               policy,
+                                               agent, #policy,
                                                seed=seed,
                                                env=env)
 
@@ -85,21 +101,23 @@ class MultiTaskSampler(Sampler):
         self.task_queue = mp.JoinableQueue()
         self.train_episodes_queue = mp.Queue()
         self.valid_episodes_queue = mp.Queue()
-        policy_lock = mp.Lock()
+        agent_lock = mp.Lock() # policy_lock = mp.Lock()
+        import pdb
+        #pdb.set_trace()
 
         self.workers = [SamplerWorker(index,
                                       env_name,
-                                      env_kwargs,
+                                      #env_kwargs,
                                       batch_size,
                                       self.env.observation_space,
                                       self.env.action_space,
-                                      self.policy,
+                                      self.agent, # self.policy,
                                       deepcopy(baseline),
                                       self.seed,
                                       self.task_queue,
                                       self.train_episodes_queue,
                                       self.valid_episodes_queue,
-                                      policy_lock)
+                                      agent_lock) #policy_lock)
             for index in range(num_workers)]
 
         for worker in self.workers:
@@ -110,6 +128,7 @@ class MultiTaskSampler(Sampler):
         self._event_loop = asyncio.get_event_loop()
         self._train_consumer_thread = None
         self._valid_consumer_thread = None
+        print("finishing init")
 
     def sample_tasks(self, num_tasks):
         return self.env.unwrapped.sample_tasks(num_tasks)
@@ -121,13 +140,19 @@ class MultiTaskSampler(Sampler):
                                'to complete. Please call `sample_wait` '
                                'before calling `sample_async` again.')
 
+        import pdb
+        #pdb.set_trace()
         for index, task in enumerate(tasks):
             self.task_queue.put((index, task, kwargs))
-
+            #pdb.set_trace()
+        import pdb
+        #pdb.set_trace()
         num_steps = kwargs.get('num_steps', 1)
         futures = self._start_consumer_threads(tasks,
                                                num_steps=num_steps)
+        #pdb.set_trace()
         self._waiting_sample = True
+        print(torch.multiprocessing.current_process())
         return futures
 
     def sample_wait(self, episodes_futures):
@@ -165,6 +190,8 @@ class MultiTaskSampler(Sampler):
 
     def _start_consumer_threads(self, tasks, num_steps=1):
         # Start train episodes consumer thread
+        import pdb
+        #pdb.set_trace()
         train_episodes_futures = [[self._event_loop.create_future() for _ in tasks]
                                   for _ in range(num_steps)]
         self._train_consumer_thread = threading.Thread(target=_create_consumer,
@@ -209,37 +236,37 @@ class MultiTaskSampler(Sampler):
         self.closed = True
 
 
-class SamplerWorker(mp.Process):
+class SamplerWorker(mp.Process): # need to pass the agent
     def __init__(self,
                  index,
                  env_name,
-                 env_kwargs,
+                 #env_kwargs,
                  batch_size,
                  observation_space,
                  action_space,
-                 policy,
+                 agent, #policy,
                  baseline,
                  seed,
                  task_queue,
                  train_queue,
                  valid_queue,
-                 policy_lock):
+                 agent_lock): # policy_lock):
         super(SamplerWorker, self).__init__()
 
-        env_fns = [make_env(env_name, env_kwargs=env_kwargs)
+        env_fns = [make_env(env_name) #, env_kwargs=env_kwargs)
                    for _ in range(batch_size)]
         self.envs = SyncVectorEnv(env_fns,
                                   observation_space=observation_space,
                                   action_space=action_space)
         self.envs.seed(None if (seed is None) else seed + index * batch_size)
         self.batch_size = batch_size
-        self.policy = policy
+        self.agent = agent # self.policy = policy
         self.baseline = baseline
 
         self.task_queue = task_queue
         self.train_queue = train_queue
         self.valid_queue = valid_queue
-        self.policy_lock = policy_lock
+        self.agent_lock = agent_lock # self.policy_lock = policy_lock
 
     def sample(self,
                index,
@@ -267,9 +294,9 @@ class SamplerWorker(mp.Process):
             # some timesteps, which in turns makes the loss explode.
             self.train_queue.put((index, step, deepcopy(train_episodes)))
 
-            with self.policy_lock:
-                loss = reinforce_loss(self.policy, train_episodes, params=params)
-                params = self.policy.update_params(loss,
+            with self.agent_lock: # self.policy_lock:
+                loss = reinforce_loss(self.agent, train_episodes, params=params) # self.policy, train_episodes, params=params)
+                params = self.agent.policy_net.update_params(loss, #self.policy.update_params(loss,
                                                    params=params,
                                                    step_size=fast_lr,
                                                    first_order=True)
@@ -287,6 +314,7 @@ class SamplerWorker(mp.Process):
                         gamma=0.95,
                         gae_lambda=1.0,
                         device='cpu'):
+        print(mp.current_process().name + str(" entered ce"))
         episodes = BatchEpisodes(batch_size=self.batch_size,
                                  gamma=gamma,
                                  device=device)
@@ -294,34 +322,64 @@ class SamplerWorker(mp.Process):
         episodes.log('process_name', self.name)
 
         t0 = time.time()
+        #print("create episode")
+        if params is not None:
+            old_params = self.agent.policy_net.state_dict()
+            self.agent.policy_net.load_state_dict(params, strict=False)
         for item in self.sample_trajectories(params=params):
             episodes.append(*item)
         episodes.log('duration', time.time() - t0)
-
-        self.baseline.fit(episodes)
-        episodes.compute_advantages(self.baseline,
+        self.baseline.fit(episodes, self.agent)
+        episodes.compute_advantages(self.baseline, self.agent,
                                     gae_lambda=gae_lambda,
                                     normalize=True)
+        if params is not None:
+            self.agent.policy_net.load_state_dict(old_params) # hope there is no race condition here! NOTE: strict=True
+        #del old_params #-- definite race condition here
+        print(mp.current_process().name + str(" about to exit from ce"))
         return episodes
 
-    def sample_trajectories(self, params=None):
+    def sample_trajectories(self, params=None): # need to pass Agent() to the class? # need to incorporate params for valid_trajs
         _ = self.envs.reset()
-        _, _, _, infos = self.envs.step(["tw-reset"] * self.batch_size)  # HACK: since reset doesn't return `infos`.
+        _, _, dones, infos = self.envs.step(["tw-reset"] * self.batch_size)  # HACK: since reset doesn't return `infos`.
+        import pdb
         with torch.no_grad():
+            ######
+            ## Preprocess
+            # Initialize
+            prev_triplets, chosen_actions, prev_game_facts = [], [], []
+            prev_step_dones, prev_scores = [], []
+            for _ in range(self.batch_size):
+                prev_triplets.append([])
+                chosen_actions.append('tw-restart')
+                prev_game_facts.append(set())
+                prev_step_dones.append(0.0)
+                prev_scores.append(0.0)
+            ####
+            # Don't need Rl^2 here but just in case
+            #meta_dones = to_pt(np.zeros(self.batch_size), enable_cuda=self.agent.use_cuda, type='float')
+            #meta_torch_step_rewards = to_pt(np.zeros(self.batch_size), enable_cuda=self.agent.use_cuda, type='float')
+            #meta_prev_h = to_pt(np.zeros((1, self.batch_size, self.agent.policy_net.block_hidden_dim)), enable_cuda=self.agent.use_cuda, type='float')
+            ####
+            #print("Before qhile loo")
             while not self.envs.dones.all():
+                #print("Just enetered the loop")
                 observations = [info["feedback"] for info in infos["infos"]]
+                info_for_agent = [info for info in infos["infos"]]
+                observation_strings, current_triplets, action_candidate_list, dict_info_for_agent, _, current_game_facts = self.agent.get_game_info_at_certain_step_maml(info_for_agent, prev_actions=chosen_actions, prev_facts=None)
+                #print("Hey after get game info")
+                observation_strings = [item + " <sep> " + a for item, a in zip(observation_strings, chosen_actions)]
+                #print("just before acting")
+                value, chosen_actions, action_log_probs, chosen_indices, _, prev_h, prev_c = self.agent.act(observation_strings, current_triplets, action_candidate_list) ## incorporate params
+                #print("after acting")
+                chosen_actions = [(action if not done else "restart") for done, action in zip(dones, chosen_actions)]
+                chosen_actions_before_parsing = [(item[idx] if not done else "*restart*") for item, idx, done in zip(dict_info_for_agent["admissible_commands"], chosen_indices, dones)]
 
-                # TODO:
-                # observations_tensor = torch.from_numpy(observations)
-                # pi = self.policy(observations_tensor, params=params)
-                # actions_tensor = pi.sample()
-                # actions = actions_tensor.cpu().numpy()
-                actions = ["look"] * self.batch_size
-
-                new_observations, rewards, _, infos = self.envs.step(actions)
+                new_observations, rewards, dones, infos = self.envs.step(chosen_actions_before_parsing)
                 batch_ids = infos['batch_ids']
-                yield (observations, actions, rewards, batch_ids)
+                yield (observations, current_triplets, action_candidate_list, chosen_actions_before_parsing, chosen_indices, rewards, batch_ids)
                 observations = new_observations
+                prev_actions = chosen_actions_before_parsing
 
     def run(self):
         while True:

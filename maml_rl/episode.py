@@ -11,13 +11,19 @@ class BatchEpisodes(object):
         self.device = device
 
         self._observations_list = [[] for _ in range(batch_size)]
+        self._triplets_list = [[] for _ in range(batch_size)]
+        self._candidates_list = [[] for _ in range(batch_size)]
         self._actions_list = [[] for _ in range(batch_size)]
         self._rewards_list = [[] for _ in range(batch_size)]
+        self._chosen_indices_list = [[] for _ in range(batch_size)]
 
         self._observation_shape = None
         self._action_shape = None
 
         self._observations = None
+        self._triplets = None
+        self._chosen_indices = None
+        self._candidates = None
         self._actions = None
         self._rewards = None
         self._returns = None
@@ -41,30 +47,40 @@ class BatchEpisodes(object):
     @property
     def observations(self):
         if self._observations is None:
-            observation_shape = self._observations_list[0][0].shape
-            observations = np.zeros((len(self), self.batch_size) + observation_shape,
-                                    dtype=np.float32)
-            for i in range(self.batch_size):
-                length = self.lengths[i]
-                np.stack(self._observations_list[i],
-                         axis=0,
-                         out=observations[:length, i])
-            self._observations = torch.as_tensor(observations, device=self.device)
+            self._observations = self._observations_list
+            #print(len(self._observations))
+            #print(len(self._observations[0]))
             del self._observations_list
         return self._observations
 
     @property
     def actions(self):
         if self._actions is None:
-            action_shape = self._actions_list[0][0].shape
-            actions = np.zeros((len(self), self.batch_size) + action_shape,
-                               dtype=np.float32)
-            for i in range(self.batch_size):
-                length = self.lengths[i]
-                np.stack(self._actions_list[i], axis=0, out=actions[:length, i])
-            self._actions = torch.as_tensor(actions, device=self.device)
+            self._actions = self._actions_list
             del self._actions_list
         return self._actions
+
+    @property
+    def chosen_indices(self):
+        if self._chosen_indices is None:
+            self._chosen_indices = self._chosen_indices_list
+            del self._chosen_indices_list
+        return self._chosen_indices
+        
+
+    @property
+    def triplets(self):
+        if self._triplets is None:
+            self._triplets = self._triplets_list
+            del self._triplets_list
+        return self._triplets
+
+    @property
+    def candidates(self):
+        if self._candidates is None:
+            self._candidates = self._candidates_list
+            del self._candidates_list
+        return self._candidates
 
     @property
     def rewards(self):
@@ -106,16 +122,16 @@ class BatchEpisodes(object):
                              'to compute and store the advantages in `episodes`.')
         return self._advantages
 
-    def append(self, observations, actions, rewards, batch_ids):
-        for observation, action, reward, batch_id in zip(
-                observations, actions, rewards, batch_ids):
+    def append(self, observations, triplets, candidates, actions, chosen_indices, rewards, batch_ids):
+        for observation, triplet, candidate, action, chosen_index, reward, batch_id in zip(
+                observations, triplets, candidates, actions, chosen_indices, rewards, batch_ids):
             if batch_id is None:
                 continue
-            # self._observations_list[batch_id].append(observation.astype(np.float32))
-            # self._actions_list[batch_id].append(action.astype(np.float32))
-            # self._rewards_list[batch_id].append(reward.astype(np.float32))
             self._observations_list[batch_id].append(observation)
+            self._triplets_list[batch_id].append(triplet)
+            self._candidates_list[batch_id].append(candidate)
             self._actions_list[batch_id].append(action)
+            self._chosen_indices_list[batch_id].append(chosen_index)
             self._rewards_list[batch_id].append(reward.astype(np.float32))
 
     @property
@@ -125,12 +141,14 @@ class BatchEpisodes(object):
     def log(self, key, value):
         self._logs[key] = value
 
-    def compute_advantages(self, baseline, gae_lambda=1.0, normalize=True):
+    def compute_advantages(self, baseline, agent, gae_lambda=1.0, normalize=True):
         # Compute the values based on the baseline
-        values = baseline(self).detach()
+        values = baseline(self, agent).detach().t() # not sure if this should be reshaped/ t()
+        print(str(values.shape) + " values shape")
         # Add an additional 0 at the end of values for
         # the estimation at the end of the episode
         values = F.pad(values * self.mask, (0, 0, 0, 1))
+        print(str(values.shape) + " values after pad")
 
         # Compute the advantages based on the values
         deltas = self.rewards + self.gamma * values[1:] - values[:-1]

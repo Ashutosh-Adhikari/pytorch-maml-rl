@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import torch.multiprocessing as mp
 import torch.nn.functional as F
 from copy import deepcopy
 
@@ -37,31 +38,7 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
     chosen_indices = episodes.chosen_indices
     eps_lengths = episodes.lengths
     max_ep_length = len(episodes)
-    '''print("chosen indices")
-    print(len(chosen_indices))
-    print(len(chosen_indices[0]))
-    print("-------")
-    print(chosen_indices[-1])
-    print("....")
-    print(chosen_indices[0])
-    print(chosen_indices[0][0])'''
-    '''print("REINFORCE OBS")
-    print(len(obs_str))
-    print(len(obs_str[0]))
-    print(obs_str[0])
-    print(len(obs_str[0][0]))
-    print("hi")
-    print(obs_str[0][0])
-    print("REINFORCE ADS")
-    print(ads.shape)
-    print(ads)
-    print(type(ads))
-    print(type(ads[0]))
-    print(len(ads))
-    print(len(ads[0]))
-    print(ads[0])
-    print('hi')
-    print(episodes.batch_size)'''
+
     log_probs = []
 
     if params is not None:
@@ -70,6 +47,7 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
         inner_loop_params = {k: v for k,v in params.items() if k in model_dict}
         model_dict.update(inner_loop_params)
         agent.policy_net.load_state_dict(model_dict)
+        del model_dict, inner_loop_params
     #print("In RF")
     #print(episodes.batch_size)
     #print(len(episodes))
@@ -85,9 +63,11 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
             if len(chosen_indices[i][j].shape)==1:
                 continue
             chosen_indices[i][j] = chosen_indices[i][j].unsqueeze(0)
-        ci = torch.cat(chosen_indices[i])
+        #ci = torch.cat(chosen_indices[i])
         #print('CI shape ' + str(ci.shape))
-        unpadded_log_probs = pi.log_prob(torch.cat(chosen_indices[i]))
+
+        unpadded_log_probs = pi.log_prob(torch.cat(chosen_indices[i]).cuda()) if mp.current_process().name=='MainProcess' else pi.log_prob(torch.cat(chosen_indices[i]).cpu())
+
         #print('unpadded_log_provs shape '+ str(unpadded_log_probs.shape))
         padded_log_probs = F.pad(unpadded_log_probs, (0, max_ep_length - eps_lengths[i])).reshape(len(episodes), -1)
         #print('padded_log_prbs shape ' + str(padded_log_probs.shape))
@@ -109,9 +89,12 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
     #log_probs = pi.log_prob(episodes.actions.view((-1, *episodes.action_shape)))
     #log_probs = log_probs.view(len(episodes), episodes.batch_size)
 
-    losses = -weighted_mean(torch_log_probs * episodes.advantages,
+    losses = -weighted_mean(torch_log_probs.cpu() * episodes.advantages,
                             lengths=episodes.lengths)
+    if mp.current_process().name == 'MainProcess':
+        losses = losses.cuda()
     if params is not None:  # RELOAD
         agent.policy_net.load_state_dict(old_model_dict)
+        del old_model_dict
     #print("about to exit reinforce loss : " + str(losses))
     return losses.mean()

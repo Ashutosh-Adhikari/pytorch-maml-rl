@@ -131,8 +131,6 @@ class MultiTaskSampler(Sampler):
         print("finishing init")
 
     def sample_tasks(self, num_tasks):
-        import pdb
-        #pdb.set_trace()
         return self.env.unwrapped.sample_tasks(num_tasks)
 
     def sample_async(self, tasks, **kwargs):
@@ -316,6 +314,7 @@ class SamplerWorker(mp.Process): # need to pass the agent
                         gamma=0.95,
                         gae_lambda=1.0,
                         device='cpu'):
+        print(mp.current_process().name + str(" entered ce"))
         episodes = BatchEpisodes(batch_size=self.batch_size,
                                  gamma=gamma,
                                  device=device)
@@ -336,6 +335,8 @@ class SamplerWorker(mp.Process): # need to pass the agent
                                     normalize=True)
         if params is not None:
             self.agent.policy_net.load_state_dict(old_params) # hope there is no race condition here! NOTE: strict=True
+        #del old_params #-- definite race condition here
+        print(mp.current_process().name + str(" about to exit from ce"))
         return episodes
 
     def sample_trajectories(self, params=None): # need to pass Agent() to the class? # need to incorporate params for valid_trajs
@@ -383,7 +384,7 @@ class SamplerWorker(mp.Process): # need to pass the agent
     def run(self):
         while True:
             data = self.task_queue.get()
-            import pdb
+
             if data is None:
                 self.envs.close()
                 self.task_queue.task_done()

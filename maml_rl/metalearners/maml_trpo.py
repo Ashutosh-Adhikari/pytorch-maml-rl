@@ -118,19 +118,23 @@ class MAMLTRPO(GradientBasedMetaLearner):
 
             ######
             ## can go in a function in ppo_agent.py
-            valid_obs_str = valid_episodes.observations
-            valid_triplets = valid_episodes.triplets
-            valid_acl = valid_episodes.candidates
+            #valid_obs_str = valid_episodes.observations
+            #valid_triplets = valid_episodes.triplets
+            #valid_acl = valid_episodes.candidates
             valid_ads = valid_episodes.advantages
             valid_chosen_indices = valid_episodes.chosen_indices
             valid_episode_lengths = valid_episodes.lengths
             valid_max_eps_length = len(valid_episodes)
+            valid_adj_mats = valid_episodes.adj_mats
+            valid_action_ids = valid_episodes.action_ids 
 
             #old_log_probs, new_log_probs = [], []
             ratios, kls, old_pis_ = [], [], []
             for i in range(valid_episodes.batch_size):
-                h_og, obs_mask, h_go, node_mask = self.agent.encode(valid_obs_str[i], valid_triplets[i], use_model='policy')
-                action_features, value, action_masks, new_h, new_c = self.agent.action_scoring(valid_acl[i], h_og, obs_mask, h_go, node_mask, use_model='policy')
+                #h_og, obs_mask, h_go, node_mask = self.agent.encode(valid_obs_str[i], valid_triplets[i], use_model='policy')
+                h_og, obs_mask, h_go, node_mask = self.agent.encode_maml(valid_adj_mats[:, i] ,use_model='policy')
+                #action_features, value, action_masks, new_h, new_c = self.agent.action_scoring(valid_acl[i], h_og, obs_mask, h_go, node_mask, use_model='policy')
+                action_features, value, action_masks, new_h, new_c = self.agent.action_scoring_maml(valid_action_ids[:, i], h_og, obs_mask, h_go, node_mask, use_model='policy')
                 #print('action_features.shape : ')
                 #print(action_features.shape)
                 #print('AF')
@@ -144,16 +148,18 @@ class MAMLTRPO(GradientBasedMetaLearner):
                 else:
                     old_pi_ = old_pi[i]
 
-                for j in range(len(valid_chosen_indices[i])):
-                    if len(valid_chosen_indices[i][j].shape)==1:
+                for j in range(len(valid_chosen_indices[:, i])):
+                    if len(valid_chosen_indices[j][i].shape)==1:
                         continue
-                    valid_chosen_indices[i][j] = valid_chosen_indices[i][j].unsqueeze(0)
+                    valid_chosen_indices[j][i] = valid_chosen_indices[j][i].unsqueeze(0)
 
                 #new_log_prob = pi.log_prob(torch.cat(valid_chosen_indices[i])).reshape(len(valid_episodes), -1)
                 #old_log_prob = old_pi_.log_prob(torch.cat(valid_chosen_indices[i])).reshape(len(valid_episodes), -1)
 
-                unpadded_new_log_prob = pi.log_prob(torch.cat(valid_chosen_indices[i]))
-                unpadded_old_log_prob = old_pi_.log_prob(torch.cat(valid_chosen_indices[i]))
+                #unpadded_new_log_prob = pi.log_prob(torch.cat(valid_chosen_indices[:,i]))
+                #unpadded_old_log_prob = old_pi_.log_prob(torch.cat(valid_chosen_indices[:,i]))
+                unpadded_new_log_prob = pi.log_prob(valid_chosen_indices[:, i])
+                unpadded_old_log_prob = old_pi_.log_prob(valid_chosen_indices[:, i])
 
                 padded_new_log_prob = F.pad(unpadded_new_log_prob, (0, valid_max_eps_length-valid_episode_lengths[i])).reshape(len(valid_episodes), -1)
                 padded_old_log_prob = F.pad(unpadded_old_log_prob, (0, valid_max_eps_length-valid_episode_lengths[i])).reshape(len(valid_episodes), -1)

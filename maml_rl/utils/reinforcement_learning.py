@@ -30,38 +30,17 @@ def get_returns(episodes):
     return to_numpy([episode.rewards.sum(dim=0) for episode in episodes])
 
 def reinforce_loss(agent, episodes, params=None): # need to incorporate `params` in ppo_model.py
-    obs_str = episodes.observations
-    triplets = episodes.triplets
-    acl = episodes.candidates
-    ads = episodes.advantages
-    chosen_indices = episodes.chosen_indices
+    #obs_str = episodes.observations
+    #triplets = episodes.triplets
+    #acl = episodes.candidates
+    ep_adj_mats = episodes.adj_mats
+    ep_action_ids = episodes.action_ids
+    ep_ads = episodes.advantages
+    ep_chosen_indices = episodes.chosen_indices
     eps_lengths = episodes.lengths
     max_ep_length = len(episodes)
-    '''print("chosen indices")
-    print(len(chosen_indices))
-    print(len(chosen_indices[0]))
-    print("-------")
-    print(chosen_indices[-1])
-    print("....")
-    print(chosen_indices[0])
-    print(chosen_indices[0][0])'''
-    '''print("REINFORCE OBS")
-    print(len(obs_str))
-    print(len(obs_str[0]))
-    print(obs_str[0])
-    print(len(obs_str[0][0]))
-    print("hi")
-    print(obs_str[0][0])
-    print("REINFORCE ADS")
-    print(ads.shape)
-    print(ads)
-    print(type(ads))
-    print(type(ads[0]))
-    print(len(ads))
-    print(len(ads[0]))
-    print(ads[0])
-    print('hi')
-    print(episodes.batch_size)'''
+    print(str(ep_adj_mats.shape) + " : adj_mats " + str(ep_action_ids.shape) + " : action ids " + str(ep_chosen_indices.shape) + " : chosen_ indices ")
+
     log_probs = []
 
     if params is not None:
@@ -74,20 +53,22 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
     #print(episodes.batch_size)
     #print(len(episodes))
     for i in range(episodes.batch_size):
-        h_og, obs_mask, h_go, node_mask = agent.encode(obs_str[i], triplets[i], use_model='policy')
+        h_og, obs_mask, h_go, node_mask = agent.encode_maml(ep_adj_mats[:, i] ,use_model='policy')
         #print('hgo_shape =  ' + str(h_go.shape))
-        action_features, value, action_masks, new_h, new_c = agent.action_scoring(acl[i], h_og, obs_mask, h_go, node_mask, use_model='policy')
+        action_features, value, action_masks, new_h, new_c = agent.action_scoring_maml(ep_action_ids[:, i], h_og, obs_mask, h_go, node_mask, use_model='policy')
+        #action_features, value, action_masks, new_h, new_c = agent.action_scoring(acl[i], h_og, obs_mask, h_go, node_mask, use_model='policy')
         #print("AF")
         #print(action_features.shape)
         #print(chosen_indices[i])
         pi = agent.policy_net.dist(probs=action_features)
-        for j in range(len(chosen_indices[i])):
-            if len(chosen_indices[i][j].shape)==1:
+        for j in range(len(ep_chosen_indices[:,i])):
+            if len(ep_chosen_indices[j][i].shape)==1:
                 continue
-            chosen_indices[i][j] = chosen_indices[i][j].unsqueeze(0)
-        ci = torch.cat(chosen_indices[i])
+            ep_chosen_indices[j][i] = ep_chosen_indices[j][i].unsqueeze(0)
+        #ci = torch.cat(ep_chosen_indices[i])
         #print('CI shape ' + str(ci.shape))
-        unpadded_log_probs = pi.log_prob(torch.cat(chosen_indices[i]))
+        ##unpadded_log_probs = pi.log_prob(torch.cat(ep_chosen_indices[i]))
+        unpadded_log_probs = pi.log_prob(ep_chosen_indices[:,i])
         #print('unpadded_log_provs shape '+ str(unpadded_log_probs.shape))
         padded_log_probs = F.pad(unpadded_log_probs, (0, max_ep_length - eps_lengths[i])).reshape(len(episodes), -1)
         #print('padded_log_prbs shape ' + str(padded_log_probs.shape))

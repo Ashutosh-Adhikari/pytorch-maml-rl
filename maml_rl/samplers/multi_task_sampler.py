@@ -369,14 +369,15 @@ class SamplerWorker(mp.Process): # need to pass the agent
                 #print("Hey after get game info")
                 observation_strings = [item + " <sep> " + a for item, a in zip(observation_strings, chosen_actions)]
                 #print("just before acting")
-                value, chosen_actions, action_log_probs, chosen_indices, _, prev_h, prev_c = self.agent.act(observation_strings, current_triplets, action_candidate_list) ## incorporate params
+                value, chosen_actions, action_log_probs, chosen_indices, _, prev_h, prev_c, input_ids,input_node_name, input_relation_name, adj_mat, action_input_ids = self.agent.act(observation_strings, current_triplets, action_candidate_list) ## incorporate params
                 #print("after acting")
                 chosen_actions = [(action if not done else "restart") for done, action in zip(dones, chosen_actions)]
                 chosen_actions_before_parsing = [(item[idx] if not done else "*restart*") for item, idx, done in zip(dict_info_for_agent["admissible_commands"], chosen_indices, dones)]
 
                 new_observations, rewards, dones, infos = self.envs.step(chosen_actions_before_parsing)
                 batch_ids = infos['batch_ids']
-                yield (observations, current_triplets, action_candidate_list, chosen_actions_before_parsing, chosen_indices, rewards, batch_ids)
+                #yield (observations, input_ids, current_triplets, adj_mat, action_candidate_list, action_input_ids, chosen_actions_before_parsing, chosen_indices, rewards, batch_ids)
+                yield ( adj_mat, action_candidate_list, action_input_ids, chosen_actions_before_parsing, chosen_indices, rewards, batch_ids)
                 observations = new_observations
                 prev_actions = chosen_actions_before_parsing
 

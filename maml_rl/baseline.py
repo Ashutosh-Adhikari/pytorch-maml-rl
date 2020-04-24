@@ -47,8 +47,12 @@ class LinearFeatureBaseline(nn.Module):
         ], dim=2)
 
     def _tw_feature(self, episodes, agent):
-        ep_obs_str = episodes.observations
-        ep_triplets = episodes.triplets
+        #ep_obs_str = episodes.observations
+        ep_obs_str = None
+        #ep_triplets = episodes.triplets
+        ep_adj_mats = episodes.adj_mats
+        ep_chosen_indices = episodes.chosen_indices
+        print("in twf " + str(ep_adj_mats.shape)  + " ep_chosen_indices " + str(ep_chosen_indices.shape) + " bs " + str(episodes.batch_size) + " len " + str(len(episodes)) + " ep lens " + str(episodes.lengths))
         ep_lengths = episodes.lengths
         max_ep_length = len(episodes)
         ep_h_og = []
@@ -56,7 +60,7 @@ class LinearFeatureBaseline(nn.Module):
         ep_h_go = []
         ep_node_mask = []
         for i in range(episodes.batch_size):
-            h_og, obs_mask, h_go, node_mask = agent.encode(ep_obs_str[i], ep_triplets[i], use_model="policy")
+            h_og, obs_mask, h_go, node_mask = agent.encode_maml(ep_adj_mats[:,i,:,:,:], use_model="policy") # graph only
             #ep_h_og.append(h_og.unsqueeze(0))
 
             h_go = F.pad(h_go, (0, 0, 0, 0, 0, max_ep_length-ep_lengths[i])) # hardcoded not only for graph input--but for padding too--suggestions?

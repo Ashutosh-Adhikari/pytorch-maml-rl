@@ -128,7 +128,6 @@ class MultiTaskSampler(Sampler):
         self._event_loop = asyncio.get_event_loop()
         self._train_consumer_thread = None
         self._valid_consumer_thread = None
-        print("finishing init")
 
     def sample_tasks(self, num_tasks):
         return self.env.unwrapped.sample_tasks(num_tasks)
@@ -287,21 +286,30 @@ class SamplerWorker(mp.Process): # need to pass the agent
                                                   gamma=gamma,
                                                   gae_lambda=gae_lambda,
                                                   device=device)
+            print("after CE in sample")
+            print("train eps " + str(train_episodes))
             train_episodes.log('_enqueueAt', datetime.now(timezone.utc))
             # QKFIX: Deep copy the episodes before sending them to their
             # respective queues, to avoid a race condition. This issue would
             # cause the policy pi = policy(observations) to be miscomputed for
             # some timesteps, which in turns makes the loss explode.
+            print("before the deepcopy")
             self.train_queue.put((index, step, deepcopy(train_episodes)))
+            print("after the deepcopy")
 
             with self.agent_lock: # self.policy_lock:
+                print("inside agent lock : " + str(mp.current_process().name))
+                print(" inside agent lock " + str(params))
                 loss = reinforce_loss(self.agent, train_episodes, params=params) # self.policy, train_episodes, params=params)
+                print("before shuffling params : " + str(mp.current_process().name))
                 params = self.agent.policy_net.update_params(loss, #self.policy.update_params(loss,
                                                    params=params,
                                                    step_size=fast_lr,
                                                    first_order=True)
-
+            print("end of loop") 
+        print("exitting loop") 
         # Sample the validation trajectories with the adapted policy
+        
         valid_episodes = self.create_episodes(params=params,
                                               gamma=gamma,
                                               gae_lambda=gae_lambda,
@@ -350,11 +358,11 @@ class SamplerWorker(mp.Process): # need to pass the agent
             prev_triplets, chosen_actions, prev_game_facts = [], [], []
             prev_step_dones, prev_scores = [], []
             for _ in range(self.batch_size):
-                prev_triplets.append([])
+                #prev_triplets.append([])
                 chosen_actions.append('tw-restart')
-                prev_game_facts.append(set())
-                prev_step_dones.append(0.0)
-                prev_scores.append(0.0)
+                #prev_game_facts.append(set())
+                #prev_step_dones.append(0.0)
+                #prev_scores.append(0.0)
             ####
             # Don't need Rl^2 here but just in case
             #meta_dones = to_pt(np.zeros(self.batch_size), enable_cuda=self.agent.use_cuda, type='float')
@@ -376,10 +384,11 @@ class SamplerWorker(mp.Process): # need to pass the agent
                 chosen_actions_before_parsing = [(item[idx] if not done else "*restart*") for item, idx, done in zip(dict_info_for_agent["admissible_commands"], chosen_indices, dones)]
 
                 new_observations, rewards, dones, infos = self.envs.step(chosen_actions_before_parsing)
+                #print("batch_ids : " + str(infos['batch_ids']) + " observations " + str(len(new_observations)))
                 batch_ids = infos['batch_ids']
                 yield (observations, current_triplets, action_candidate_list, chosen_actions_before_parsing, chosen_indices, rewards, batch_ids)
                 observations = new_observations
-                prev_actions = chosen_actions_before_parsing
+                prev_actions = chosen_actions_before_parsing # where is prev_actions being used? should be chosen actions?
 
     def run(self):
         while True:

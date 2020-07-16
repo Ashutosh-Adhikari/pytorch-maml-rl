@@ -51,6 +51,7 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
     #print("In RF")
     #print(episodes.batch_size)
     #print(len(episodes))
+    print(mp.current_process().name + ": process name1 reinforce loss " + str(type(params)) + " : type params")
     for i in range(episodes.batch_size):
         h_og, obs_mask, h_go, node_mask = agent.encode(obs_str[i], triplets[i], use_model='policy')
         #print('hgo_shape =  ' + str(h_go.shape))
@@ -66,12 +67,13 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
         #ci = torch.cat(chosen_indices[i])
         #print('CI shape ' + str(ci.shape))
 
-        unpadded_log_probs = pi.log_prob(torch.cat(chosen_indices[i]).cuda()) if mp.current_process().name=='MainProcess' else pi.log_prob(torch.cat(chosen_indices[i]).cpu())
-
+        #unpadded_log_probs = pi.log_prob(torch.cat(chosen_indices[i]).cuda()) if mp.current_process().name=='MainProcess' else pi.log_prob(torch.cat(chosen_indices[i]).cpu())
+        unpadded_log_probs = pi.log_prob(torch.cat(chosen_indices[i]).cuda())
         #print('unpadded_log_provs shape '+ str(unpadded_log_probs.shape))
         padded_log_probs = F.pad(unpadded_log_probs, (0, max_ep_length - eps_lengths[i])).reshape(len(episodes), -1)
         #print('padded_log_prbs shape ' + str(padded_log_probs.shape))
         log_probs.append(padded_log_probs)
+        print(mp.current_process().name + "iter : " + str(i)+" : process name2 reinforce loss")
         #print('ULP-shape : ' + str(unpadded_log_probs.shape))
         #log_probs.append(pi.log_prob(torch.cat(chosen_indices[i])).reshape(len(episodes), -1))
     #print('log_probs shape : ' + str(len(log_probs)))
@@ -89,12 +91,13 @@ def reinforce_loss(agent, episodes, params=None): # need to incorporate `params`
     #log_probs = pi.log_prob(episodes.actions.view((-1, *episodes.action_shape)))
     #log_probs = log_probs.view(len(episodes), episodes.batch_size)
 
-    losses = -weighted_mean(torch_log_probs.cpu() * episodes.advantages,
+    losses = -weighted_mean(torch_log_probs.cpu() * episodes.advantages.cpu(),
                             lengths=episodes.lengths)
     if mp.current_process().name == 'MainProcess':
         losses = losses.cuda()
     if params is not None:  # RELOAD
+        print("in RL to update params ")
         agent.policy_net.load_state_dict(old_model_dict)
         del old_model_dict
-    #print("about to exit reinforce loss : " + str(losses))
+    print("about to exit reinforce loss : " + str(losses) + " : " + str(mp.current_process().name))
     return losses.mean()

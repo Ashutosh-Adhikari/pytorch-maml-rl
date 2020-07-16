@@ -81,13 +81,20 @@ class LinearFeatureBaseline(nn.Module):
         agg_ep_h_go = masked_ep_h_go.view(masked_ep_h_go.shape[0] * masked_ep_h_go.shape[1], masked_ep_h_go.shape[-2], masked_ep_h_go.shape[-1])
         agg_ep_node_masks = ep_node_masks.view(ep_node_masks.shape[0] * ep_node_masks.shape[1], ep_node_masks.shape[-1])
         agg_ep_h_go = masked_mean(agg_ep_h_go, agg_ep_node_masks) # bs * seq_len X block_hidden_dim
+        #print(episodes.returns.view(-1, 1))
         returns = episodes.returns.view(-1, 1)
+        #print(returns)
         reg_coeff = self._reg_coeff
         XT_y = torch.matmul(agg_ep_h_go.permute(1, 0), returns)
         XT_X = torch.matmul(agg_ep_h_go.permute(1, 0), agg_ep_h_go)
+        #print(str(XT_y) + " str Xt_y") 
+        #print(str(XT_X) + " str xtx")
+        #print(str(reg_coeff)  + " recoeff")
+        #print(str(self._eye) + " self. eye") 
+        #print(XT_X + reg_coeff * self._eye)
         for _ in range(5):
             try:
-                coeffs, _ = torch.lstsq(XT_y, XT_X + reg_coeff * self._eye)
+                coeffs, _ = torch.lstsq(XT_y, XT_X + reg_coeff * self._eye.cuda())
                 break
             except RuntimeError:
                 reg_coeff *= 10
@@ -104,6 +111,6 @@ class LinearFeatureBaseline(nn.Module):
         agg_masked_features = masked_features.view(masked_features.shape[0] * masked_features.shape[1], masked_features.shape[-2], masked_features.shape[-1])
         agg_node_masks = masks.view(masks.shape[0] * masks.shape[1], masks.shape[-1])
         agg_masked_features = masked_mean(agg_masked_features, agg_node_masks) # bs * seq_len X block_hidden_dim
-        values = torch.mv(agg_masked_features, self.weight)
+        values = torch.mv(agg_masked_features, self.weight.cuda())
 
         return values.view(features.shape[:2])

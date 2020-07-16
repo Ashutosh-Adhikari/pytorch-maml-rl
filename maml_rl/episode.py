@@ -95,9 +95,10 @@ class BatchEpisodes(object):
 
     @property
     def returns(self):
+        #print(str((self.mask)) + " " + str((self.rewards)) + " " + str(self.rewards[0] * self.mask[0])  +  "  " + str(self.device))
         if self._returns is None:
-            self._returns = torch.zeros_like(self.rewards)
-            return_ = torch.zeros((self.batch_size,), dtype=torch.float32)
+            self._returns = torch.zeros_like(self.rewards, device=self.device)
+            return_ = torch.zeros((self.batch_size,), dtype=torch.float32, device=self.device)
             for i in range(len(self) - 1, -1, -1):
                 return_ = self.gamma * return_ + self.rewards[i] * self.mask[i]
                 self._returns[i] = return_
@@ -153,15 +154,16 @@ class BatchEpisodes(object):
         # Compute the advantages based on the values
         deltas = self.rewards + self.gamma * values[1:] - values[:-1]
         self._advantages = torch.zeros_like(self.rewards)
-        gae = torch.zeros((self.batch_size,), dtype=torch.float32)
+        gae = torch.zeros((self.batch_size,), dtype=torch.float32, device=self.device)
         for i in range(len(self) - 1, -1, -1):
             gae = gae * self.gamma * gae_lambda + deltas[i]
             self._advantages[i] = gae
 
         # Normalize the advantages
         if normalize:
-            self._advantages = weighted_normalize(self._advantages,
+            self._advantages = weighted_normalize(self._advantages.cpu(),
                                                   lengths=self.lengths)
+        self._advantages = self._advantages.to(self.device)
         # Once the advantages are computed, the returns are not necessary
         # anymore (only to compute the parameters of the baseline)
         del self._returns

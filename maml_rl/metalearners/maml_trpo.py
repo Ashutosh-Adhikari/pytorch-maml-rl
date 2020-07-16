@@ -67,14 +67,20 @@ class MAMLTRPO(GradientBasedMetaLearner):
             first_order = self.first_order
         # Loop over the number of steps of adaptation
         params = None
+        ii =0
         for futures in train_futures:
+            print("main process about to go to reinforce loss : iter " + str(ii))
             inner_loss = reinforce_loss(self.agent, #self.policy,
                                         await futures,
                                         params=params)
+            print("main process returns : iter " + str(ii))
             params = self.agent.policy_net.update_params(inner_loss, #self.policy.update_params(inner_loss,
                                                params=params,
                                                step_size=self.fast_lr,
                                                first_order=first_order)
+            print("main process updates params in `adapt` : " + str(ii))
+            ii+=1
+        print("return params")
         return params
 
     def hessian_vector_product(self, kl, damping=1e-2):
@@ -107,6 +113,7 @@ class MAMLTRPO(GradientBasedMetaLearner):
         return _product
 
     async def surrogate_loss(self, train_futures, valid_futures, old_pi=None):
+        #print("enter sl")
         first_order = (old_pi is not None) or self.first_order
         params = await self.adapt(train_futures,
                                   first_order=first_order)
@@ -218,10 +225,12 @@ class MAMLTRPO(GradientBasedMetaLearner):
         num_tasks = len(train_futures[0])
         logs = {}
 
+        print("entered step")
         # Compute the surrogate loss
         old_losses, old_kls, old_pis = self._async_gather([
             self.surrogate_loss(train, valid, old_pi=None)
             for (train, valid) in zip(zip(*train_futures), valid_futures)])
+        print("after async gather")
 
         logs['loss_before'] = to_numpy(old_losses)
         logs['kl_before'] = to_numpy(old_kls)
